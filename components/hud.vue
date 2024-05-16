@@ -3,6 +3,7 @@
     <div id="hud-header">
         <div id="left-menu">
             <div @click="unlock_command" class="status-icon"><Icon name="mdi:car-key" :color="indicateur_pilote" /></div>
+            <div class="status-icon"><Icon name="mdi:gamepad" :color="[gamepadAvailable ? 'green' : 'red']" /></div>
         </div>
 
         <div id="right-menu">
@@ -15,7 +16,7 @@
     </div>
 
     <!-- Indicateurs de vitesse et de batterie -->
-    <div class="indicateur" id="speed">
+    <div v-show="!indicateur_proxy" class="indicateur" id="speed">
         <div class="title-indicator">
             <p>Vitesse (Km/h)</p>
         </div>
@@ -25,7 +26,7 @@
         </div>
     </div>
 
-    <div class="indicateur" id="battery">
+    <div v-show="!indicateur_proxy" class="indicateur" id="battery">
         <div class="title-indicator">
             <p>Batterie (V)</p>
         </div>
@@ -35,11 +36,14 @@
         </div>
     </div>
 
+    <!-- Erreur de proxy -->
+    <h1 v-show="indicateur_proxy" id="erreur-proxy">Proxy déconnecté.</h1>
+
     <!-- Indicateur d'angles -->
-    <object id="angles" ref="angles" data="/hud.svg" type="image/svg+xml"></object>
+    <object v-show="!indicateur_proxy" id="angles" ref="angles" data="/hud.svg" type="image/svg+xml"></object>
 
     <!-- GPS & Boussole -->
-    <iframe id="gps" ref="gps" src="/gps" frameborder="0"></iframe>
+    <iframe v-show="!indicateur_proxy" id="gps" ref="gps" src="/gps" frameborder="0"></iframe>
     <object id="boussole" ref="boussole" data="/boussole.svg" type="image/svg+xml"></object>
 </template>
 
@@ -98,6 +102,18 @@
         display: block;
         margin: auto;
         text-align:center;
+    }
+
+    #erreur-proxy {
+        display: block;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: red;
+        font-family: "Roboto", sans-serif;
+        font-style: normal;
+        z-index: 500;
     }
 
     #angles {
@@ -175,12 +191,16 @@
 </style>
 
 <script setup lang="ts">
-    import { ref } from 'vue';
-    import { useGamepad } from '@vueuse/core'
-    const { Remote } = useRemote();
+    import { ref, computed } from 'vue';
+    import { useGamepad, mapGamepadToXbox360Controller } from '@vueuse/core'
 
+    const { Remote } = useRemote();
+    const { gamepads } = useGamepad();
+
+    const gamepad = computed(() => gamepads.value.find(g => g.id.includes("STANDARD")));
+    const gamepadOnline = computed(() => gamepad.value != undefined ? true : false);
+    
     onMounted(() => {
-        console.log("Mounted");
         context.value = hud.value?.getContext("2d") || undefined;
     });
 
@@ -202,9 +222,11 @@
     const indicateur_gyro = ref("white");
     const indicateur_analogique = ref("white");
     const indicateur_antenne = ref("white");
+    const gamepadAvailable = ref(gamepadOnline);
     const reception_antenne = ref(-999);
     const indicateur_batterie = ref("---");
     const indicateur_vitesse = ref("---");
+    const indicateur_proxy = ref(false);
 
     // Permet de mettre à jour la boussole
     function updateBoussole(cap: number) {
@@ -272,21 +294,25 @@
     // Proxy
     //////
 
+    const remote = new Remote("ws://localhost:8000/ws", updateHUD, updateProxyState);
+
     // Permet de mettre à jour le HUD via un message de la voiture (Indicateur)
     function updateHUDIndicator(message: any) {
         // Vérifie si je suis l'utilisateur actif
-        if (message.client_id == message.pilot_id) {
+        if (remote.controlAvailable()) {
             indicateur_pilote.value = "green";
         } else {
-            indicateur_pilote.value = "white";
+            indicateur_pilote.value = "red";
         }
 
         // Vérifie le status de chaque capteurs
         // IMU
         if (message.sensors.imu.status == 255) {
             indicateur_gyro.value = "red";
-        } else {
+        } else if (message.sensors.imu.status & 0x1) {
             indicateur_gyro.value = "green";
+        } else {
+            indicateur_gyro.value = "blue";
         }
 
         // GPS
@@ -310,26 +336,29 @@
         // Capteur Analogique
         if (message.sensors.analog.status == 255) {
             indicateur_analogique.value = "red";
-        } else {
+        } else if (message.sensors.analog.status & 0x1) {
             indicateur_analogique.value = "green";
+        } else {
+            indicateur_analogique.value = "blue";
         }
     }
 
     // Permet de mettre à jour le HUD via un message de la voiture
     function updateHUD(message: any) {
-        try {
-            let heading = message.sensors.mag.heading;
+        let heading = message.sensors.mag.heading;
 
-            updateHUDIndicator(message);
-            updateBatterie(message.sensors.analog.battery);
-            updateVitesse(message.sensors.gps.vitesse_sol);
-            updateGPS(message.sensors.gps.lat_deg, message.sensors.gps.lat_min, message.sensors.gps.dir_lat, message.sensors.gps.long_deg, message.sensors.gps.long_min, message.sensors.gps.dir_long, heading);
-            updateBoussole(heading);
-            updateAngles(-message.sensors.imu.ay, -message.sensors.imu.ax);
-        } catch {
-            console.log("Erreur lors de la retranscription HUD.")
-        }
-    } 
+        updateHUDIndicator(message);
+        updateBatterie(message.sensors.analog.battery);
+        updateVitesse(message.sensors.gps.vitesse_sol);
+        updateGPS(message.sensors.gps.lat_deg, message.sensors.gps.lat_min, message.sensors.gps.dir_lat, message.sensors.gps.long_deg, message.sensors.gps.long_min, message.sensors.gps.dir_long, heading);
+        updateBoussole(heading);
+        updateAngles(-message.sensors.imu.ay, -message.sensors.imu.ax);
+    }
+
+    // Permet de récupérer un changement sur la connexion au proxy
+    function updateProxyState(status: boolean) {
+        indicateur_proxy.value = !status;
+    }
 
     // Formate le message afin d'obtenir les valeur (RAW) du magnétomètre pour une calibration
     function magnetic_calibration(message: any) {
@@ -340,26 +369,38 @@
         console.log(mag_raw_x + "," + mag_raw_y + "," + mag_raw_z);
     }
 
-    // Réceptionne les trames et les transforme en object
-    function onProxyMessage(message: any) {
-        try {
-            let data = JSON.parse(message.data);
-            //magnetic_calibration(data);
-            updateHUD(data);
-        } catch {
-            console.log("Erreur lors de la réception du message.")
-        }
-    }
-
-    const proxy = new Remote(onProxyMessage);
-
     // Fonction de déverrouillage des contrôles
     function unlock_command() {
-        if (proxy.isConnectedRemote()) {
+        if (remote.isConnectedRemote()) {
             let key = prompt("Clé de sécurité.") as string;
             console.log("Déverrouillage via la clé: " + key)
-            proxy.unlockRemoteControl(key);
+            remote.unlockRemoteControl(key);
         }
     }
 
+    //////
+    // Contrôle
+    //////
+
+    // Envoi les commandes aux proxy
+    setInterval(() => {
+        if (!gamepadOnline.value || !remote.controlAvailable()) {
+            return;
+        }
+
+        let ar = gamepad.value?.buttons[6].value;
+        let av = gamepad.value?.buttons[7].value;
+
+        let speed = 0.0;
+        if (ar != undefined && av != undefined) {
+            speed = -ar + av;
+        }
+
+        let steer = gamepad.value?.axes[0];
+        if (steer == undefined) {
+            steer = 0.0;
+        }
+
+        remote.sendControl(speed, steer);
+    }, 1000/30) // 30fps
 </script>
