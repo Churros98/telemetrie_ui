@@ -1,406 +1,282 @@
-<template>
-    <!-- Header -->
-    <div id="hud-header">
-        <div id="left-menu">
-            <div @click="unlock_command" class="status-icon"><Icon name="mdi:car-key" :color="indicateur_pilote" /></div>
-            <div class="status-icon"><Icon name="mdi:gamepad" :color="[gamepadAvailable ? 'green' : 'red']" /></div>
-        </div>
-
-        <div id="right-menu">
-            <div @click="external_gps" class="status-icon"><Icon name="mdi:gps-not-fixed" :color="indicateur_gps" /></div>
-            <div class="status-icon"><Icon name="mdi:compass" :color="indicateur_boussole" /></div>
-            <div class="status-icon"><Icon name="mdi:gyro" :color="indicateur_gyro" /></div>
-            <div class="status-icon"><Icon name="mdi:analog" :color="indicateur_analogique" /></div>
-            <div class="status-icon"><Icon name="mdi:antenna" :color="indicateur_antenne" />{{ reception_antenne }} dBm</div>
-        </div>
-    </div>
-
-    <!-- Indicateurs de vitesse et de batterie -->
-    <div v-show="!indicateur_proxy" class="indicateur" id="speed">
-        <div class="title-indicator">
-            <p>Vitesse (Km/h)</p>
-        </div>
-
-        <div class="value-indicator">
-            <p>{{ indicateur_vitesse }}</p>
-        </div>
-    </div>
-
-    <div v-show="!indicateur_proxy" class="indicateur" id="battery">
-        <div class="title-indicator">
-            <p>Batterie (V)</p>
-        </div>
-
-        <div class="value-indicator">
-            <p>{{ indicateur_batterie }}</p>
-        </div>
-    </div>
-
-    <!-- Erreur de proxy -->
-    <h1 v-show="indicateur_proxy" id="erreur-proxy">Proxy déconnecté.</h1>
-
-    <!-- Indicateur d'angles -->
-    <object v-show="!indicateur_proxy" id="angles" ref="angles" data="/hud.svg" type="image/svg+xml"></object>
-
-    <!-- GPS & Boussole -->
-    <iframe v-show="!indicateur_proxy" id="gps" ref="gps" src="/gps" frameborder="0"></iframe>
-    <object id="boussole" ref="boussole" data="/boussole.svg" type="image/svg+xml"></object>
-</template>
-
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap');
-
-    #speed {
-        top: 47%;
-        left: 20%;
-    }
-
-    #battery {
-        top: 47%;
-        left: 70%;
-    }
-
-    .indicateur {
-        display: block;
-        position: absolute;
-        width: 10%;
-        height: 10%;
-        z-index: 300;
-        background-color: rgba(0, 0, 0, 0.4);
-        color: white;
-        font-family: "Roboto", sans-serif;
-        font-style: normal;
-    }
-
-    .title-indicator {
-        display: flex;
-        background-color: rgba(0, 0, 0, 0.7);
-        width: 100%;
-        height: 30%;
-        font-size: 1em;
-        margin: auto;
-        align-items:center;
-    }
-
-    .title-indicator p {
-        display: block;
-        margin: auto;
-        text-align:center;
-    }
-
-    .value-indicator {
-        display: flex;
-        width: 100%;
-        height: 70%;
-        font-size: 3em;
-        font-weight: bold;
-        margin: auto;
-        align-items:center;
-    }
-
-    .value-indicator p {
-        display: block;
-        margin: auto;
-        text-align:center;
-    }
-
-    #erreur-proxy {
-        display: block;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        color: red;
-        font-family: "Roboto", sans-serif;
-        font-style: normal;
-        z-index: 500;
-    }
-
-    #angles {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 80%;
-        height: 60%;
-        transform: translate(-50%, -50%);
-        z-index: 100;
-    }
-
-    #gps {
-        position: absolute;
-        z-index: 200;
-        bottom: 1%;
-        left: 1%;
-        width: 20%;
-        height: 20%;
-        border-radius: 2%;
-    }
-
-    #hud-header {
-        display: block;
-        width: 100%;
-        height: 5%;
-        position: absolute;
-        top: 0%;
-        background: rgba(0, 0, 0, 0.4);
-        z-index: 200;
-    }
-
-    #right-menu {
-        margin-right: auto;
-        display: flex;
-        align-items: stretch;
-        float: right;
-        height: 100%;
-    }
-
-    #left-menu {
-        margin-right: auto;
-        display: flex;
-        align-items: stretch;
-        float: left;
-        height: 100%;
-    }
-
-    .status-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-family: "Roboto", sans-serif;
-        font-weight: 400;
-        font-style: normal;
-        margin-left: 0.5em;
-        margin-right: 0.5em;
-    }
-
-    #boussole {
-        position: absolute;
-        bottom: 50px;
-        left: 50%;
-        width: 20%;
-        height: 20%;
-        transform: translate(-50%, 0%);
-        z-index: 500;
-    }
-
-    /* #boussole #layer2 {
-        transform-origin: 50% 50%;
-        transform: rotate(90deg);
-    } */
-</style>
-
 <script setup lang="ts">
-    import { ref, computed } from 'vue';
-    import { useGamepad, mapGamepadToXbox360Controller } from '@vueuse/core'
+import '~/assets/style/hud.css'
 
-    const { Remote } = useRemote();
-    const { gamepads } = useGamepad();
+import { mapGamepadToXbox360Controller, useGamepad } from '@vueuse/core'
+import { type Prettify, Surreal } from 'surrealdb.js'
+import { extend } from 'leaflet'
 
-    const gamepad = computed(() => gamepads.value.find(g => g.id.includes("STANDARD")));
-    const gamepadOnline = computed(() => gamepad.value != undefined ? true : false);
-    
-    onMounted(() => {
-        context.value = hud.value?.getContext("2d") || undefined;
-    });
+// Prépare le contrôleur
+const { gamepads } = useGamepad()
+const gamepad = computed(() => gamepads.value.find(g => g.id.includes('STANDARD')))
+const controller = mapGamepadToXbox360Controller(gamepad)
+const gamepadOnline = computed(() => gamepad.value !== undefined)
 
-    //////
-    // UI
-    //////
-    
-    // Référence
-    const hud: Ref<HTMLCanvasElement | undefined> = ref();
-    const context: Ref<CanvasRenderingContext2D | undefined> = ref();
-    const gps: Ref<HTMLIFrameElement | undefined> = ref();
-    const boussole: Ref<HTMLObjectElement | undefined> = ref();
-    const angles: Ref<HTMLObjectElement | undefined> = ref();
+//////
+// UI
+//////
 
-    // Indicateur modifiable
-    const indicateur_pilote = ref("white");
-    const indicateur_gps = ref("white");
-    const indicateur_boussole = ref("white");
-    const indicateur_gyro = ref("white");
-    const indicateur_analogique = ref("white");
-    const indicateur_antenne = ref("white");
-    const gamepadAvailable = ref(gamepadOnline);
-    const reception_antenne = ref(-999);
-    const indicateur_batterie = ref("---");
-    const indicateur_vitesse = ref("---");
-    const indicateur_proxy = ref(false);
+// Référence
+const hud = ref<HTMLCanvasElement>()
+const context = ref<CanvasRenderingContext2D>()
+const gps = ref<HTMLIFrameElement>()
+const boussole = ref<HTMLObjectElement>()
+const angles = ref<HTMLObjectElement>()
 
-    // Permet de mettre à jour la boussole
-    function updateBoussole(cap: number) {
-        if (boussole.value != null) {
-            let boussoleLayer2 = boussole.value.contentDocument?.getElementById("layer2");
-            if (boussoleLayer2) {
-                boussoleLayer2.style.transformOrigin = "50% 50%";
-                boussoleLayer2.style.transform = "rotate(-"+cap+"deg)";
-            }
-        }
+// Indicateur modifiable
+const indicateur_gps = ref('white')
+const indicateur_boussole = ref('white')
+const indicateur_gyro = ref('white')
+const indicateur_analogique = ref('white')
+const indicateur_antenne = ref('white')
+const gamepadAvailable = ref(gamepadOnline)
+const reception_antenne = ref(-999)
+const indicateur_batterie = ref('---')
+const indicateur_vitesse = ref('---')
+const indicateur_db = ref(false)
+
+onMounted(() => {
+  context.value = hud.value?.getContext('2d') || undefined
+})
+
+// Permet de mettre à jour la boussole
+function updateBoussole(cap: number) {
+  if (boussole.value != null) {
+    const boussoleLayer2 = boussole.value.contentDocument?.getElementById('layer2')
+    if (boussoleLayer2) {
+      boussoleLayer2.style.transformOrigin = '50% 50%'
+      boussoleLayer2.style.transform = `rotate(-${cap}deg)`
     }
+  }
+}
 
-    // Permet de mettre à  jour l'indicateur de batterie
-    function updateBatterie(perc: number) {
-        indicateur_batterie.value = perc.toFixed(2);
+// Permet de mettre à  jour l'indicateur de batterie
+function updateBatterie(perc: number) {
+  indicateur_batterie.value = perc.toFixed(2)
+}
+
+// Permet de mettre à  jour l'indicateur de vitesse
+function updateVitesse(speed: number) {
+  indicateur_vitesse.value = speed.toFixed(2)
+}
+
+// Permet de mettre à jour l'indicateur d'angles
+function updateAngles(roll: number, pitch: number) {
+  pitch = pitch % 360
+  roll = roll % 360
+
+  if (angles.value != null) {
+    const anglesLayer1 = angles.value.contentDocument?.getElementById('layer1')
+    if (anglesLayer1) {
+      anglesLayer1.style.transformOrigin = '50% 50%'
+      anglesLayer1.style.transform = `rotate(${roll}deg) translate(0px, ${pitch}%)`
     }
+  }
+}
 
-    // Permet de mettre à  jour l'indicateur de vitesse
-    function updateVitesse(speed: number) {
-        indicateur_vitesse.value = speed.toFixed(2);
-    }
+//////
+// GPS
+/// ///
+const gps_chan = new BroadcastChannel('gps_channel')
 
-    // Permet de mettre à jour l'indicateur d'angles
-    function updateAngles(roll: number, pitch: number) {
-        pitch = pitch % 360
-        roll = roll % 360
+// Permet l'ouverture du GPS dans une fenêtre externe
+function external_gps() {
+  if (gps.value)
+    gps.value.remove()
 
-        if (angles.value != null) {
-            let anglesLayer1 = angles.value.contentDocument?.getElementById("layer1");
-            if (anglesLayer1) {
-                anglesLayer1.style.transformOrigin = "50% 50%";
-                anglesLayer1.style.transform = "rotate("+roll+"deg) translate(0px, " + pitch + "%)";
-            }
-        }
-    }
+  window.open('/gps')
+}
 
-    //////
-    // GPS
-    ////// 
-    const gps_chan = new BroadcastChannel('gps_channel');
+// // Mets à jour le GPS
+function updateGPS(lat: number, long: number, cap: number) {
+  gps_chan.postMessage({ lat, long, cap })
+}
 
-    // Permet l'ouverture du GPS dans une fenêtre externe
-    function external_gps() {
-        if (gps.value) {
-            gps.value.remove();
-        }
+//////
+// SurrealDB
+//////
 
-        window.open("/gps");
-    }
+interface IMU extends Record<string, unknown> {
+  angles: [number, number, number]
+  temp: number
+}
 
-    // Mets à jour le GPS
-    function updateGPS(lat_deg: number, lat_min: number, lat_dir: number, long_deg: number, long_min: number, long_dir: number, cap: number) {
-        // Gestion de la direction
-        let lat_dir_value = lat_dir == 78 ? 1 : -1;
-        let long_dir_value = long_dir == 69 ? 1 : -1;
+interface Analog extends Record<string, unknown> {
+  battery: number
+}
 
-        // Conversion Degrée Minute en Degrée décimal
-        let lat = (lat_deg + (lat_min / 60)) * lat_dir_value;
-        let long = (long_deg + (long_min / 60)) * long_dir_value;
+interface MAG extends Record<string, unknown> {
+  raw: [number, number, number]
+  heading: number
+}
 
-        gps_chan.postMessage({lat: lat, long: long, cap: cap});
-    }
+interface GGA extends Record<string, unknown> {
+  longitude: number
+  latitude: number
+  satellite_count: number
+  fix: boolean
+}
 
-    //////
-    // Proxy
-    //////
+interface VTG extends Record<string, unknown> {
+  speed: number
+}
 
-    const remote = new Remote("ws://localhost:8000/ws", updateHUD, updateProxyState);
+function imuMessage(action: string, result: IMU) {
+  if (action !== 'UPDATE')
+    return 0
 
-    // Permet de mettre à jour le HUD via un message de la voiture (Indicateur)
-    function updateHUDIndicator(message: any) {
-        // Vérifie si je suis l'utilisateur actif
-        if (remote.controlAvailable()) {
-            indicateur_pilote.value = "green";
-        } else {
-            indicateur_pilote.value = "red";
-        }
+  updateAngles(-result.angles[1], -result.angles[0])
+}
 
-        // Vérifie le status de chaque capteurs
-        // IMU
-        if (message.sensors.imu.status == 255) {
-            indicateur_gyro.value = "red";
-        } else if (message.sensors.imu.status & 0x1) {
-            indicateur_gyro.value = "green";
-        } else {
-            indicateur_gyro.value = "blue";
-        }
+function analogMessage(action: string, result: Analog) {
+  if (action !== 'UPDATE')
+    return 0
 
-        // GPS
-        if (message.sensors.gps.status == 255) {
-            indicateur_gps.value = "red";
-        } else if (message.sensors.gps.status & 0x1) {
-            indicateur_gps.value = "green";
-        } else {
-            indicateur_gps.value = "blue";
-        }
+  updateBatterie(result.battery)
+}
 
-        // Boussole
-        if (message.sensors.mag.status == 255) {
-            indicateur_boussole.value = "red";
-        } else if (message.sensors.mag.status & 0x1) {
-            indicateur_boussole.value = "green";
-        } else {
-            indicateur_boussole.value = "blue";
-        }
+function magMessage(action: string, result: MAG) {
+  if (action !== 'UPDATE')
+    return 0
 
-        // Capteur Analogique
-        if (message.sensors.analog.status == 255) {
-            indicateur_analogique.value = "red";
-        } else if (message.sensors.analog.status & 0x1) {
-            indicateur_analogique.value = "green";
-        } else {
-            indicateur_analogique.value = "blue";
-        }
-    }
+  updateBoussole(result.heading)
+}
 
-    // Permet de mettre à jour le HUD via un message de la voiture
-    function updateHUD(message: any) {
-        let heading = message.sensors.mag.heading;
+function ggaMessage(action: string, result: GGA) {
+  if (action !== 'UPDATE')
+    return 0
 
-        updateHUDIndicator(message);
-        updateBatterie(message.sensors.analog.battery);
-        updateVitesse(message.sensors.gps.vitesse_sol);
-        updateGPS(message.sensors.gps.lat_deg, message.sensors.gps.lat_min, message.sensors.gps.dir_lat, message.sensors.gps.long_deg, message.sensors.gps.long_min, message.sensors.gps.dir_long, heading);
-        updateBoussole(heading);
-        updateAngles(-message.sensors.imu.ay, -message.sensors.imu.ax);
-    }
+  updateGPS(result.latitude, result.longitude, 0.0)
+}
 
-    // Permet de récupérer un changement sur la connexion au proxy
-    function updateProxyState(status: boolean) {
-        indicateur_proxy.value = !status;
-    }
+function vtgMessage(action: string, result: VTG) {
+  if (action !== 'UPDATE')
+    return 0
 
-    // Formate le message afin d'obtenir les valeur (RAW) du magnétomètre pour une calibration
-    function magnetic_calibration(message: any) {
-        let mag_raw_x = message.sensors.mag.raw_x;
-        let mag_raw_y = message.sensors.mag.raw_y;
-        let mag_raw_z = message.sensors.mag.raw_z;
+  updateVitesse(result.speed)
+}
 
-        console.log(mag_raw_x + "," + mag_raw_y + "," + mag_raw_z);
-    }
+// Prépare SurrealDB
+const db = new Surreal()
 
-    // Fonction de déverrouillage des contrôles
-    function unlock_command() {
-        if (remote.isConnectedRemote()) {
-            let key = prompt("Clé de sécurité.") as string;
-            console.log("Déverrouillage via la clé: " + key)
-            remote.unlockRemoteControl(key);
-        }
-    }
+interface Control extends Prettify<Record<string, unknown>> {
+  steer: number
+  speed: number
+}
 
-    //////
-    // Contrôle
-    //////
+function startControl() {
+  // Envoi les commandes aux proxy
+  watchThrottled([
+    () => controller.value?.triggers.left.value,
+    () => controller.value?.triggers.right.value,
+    () => Number.parseFloat(controller.value?.stick.left.horizontal?.toFixed(1) ?? '0.0'),
+  ], async ([ar, av, steer]) => {
+    let speed = 0.0
+    if (ar !== undefined && av !== undefined)
+      speed = -ar + av
 
-    // Envoi les commandes aux proxy
-    setInterval(() => {
-        if (!gamepadOnline.value || !remote.controlAvailable()) {
-            return;
-        }
+    if (steer === undefined)
+      steer = 0.0
 
-        let ar = gamepad.value?.buttons[6].value;
-        let av = gamepad.value?.buttons[7].value;
+    const result = await db.update<Control>('control:realtime', {
+      steer,
+      speed,
+    })
 
-        let speed = 0.0;
-        if (ar != undefined && av != undefined) {
-            speed = -ar + av;
-        }
+    console.log(result)
+  }, {
+    throttle: 1000 / 30,
+  })
+}
 
-        let steer = gamepad.value?.axes[0];
-        if (steer == undefined) {
-            steer = 0.0;
-        }
+try {
+  // Connexion à la base de donnée
+  await db.connect('wss://db.theorywrong.me/rpc', {
+    namespace: 'voiturerc',
+    database: 'voiturerc',
+    auth: {
+      username: 'master',
+      password: 'rootkit',
+    },
+  })
 
-        remote.sendControl(speed, steer);
-    }, 1000/30) // 30fps
+  console.log(`Status: ${db.status}`)
+
+  try {
+    await db.live<IMU>('imu', imuMessage)
+    await db.live<Analog>('analog', analogMessage)
+    await db.live<MAG>('mag', magMessage)
+    await db.live<GGA>('gga', ggaMessage)
+    await db.live<VTG>('vtg', vtgMessage)
+    startControl()
+  }
+  catch (e) {
+    console.error('Erreur lors de la création du live.', e)
+  }
+}
+catch (e) {
+  console.error('Erreur de base de donnée.', e)
+  indicateur_db.value = true
+}
 </script>
+
+<template>
+  <!-- Header -->
+  <div id="hud-header">
+    <div id="left-menu">
+      <div class="status-icon">
+        <Icon name="mdi:gamepad" :color="[gamepadAvailable ? 'green' : 'red']" />
+      </div>
+    </div>
+
+    <div id="right-menu">
+      <div class="status-icon" @click="external_gps">
+        <Icon name="mdi:gps-not-fixed" :color="indicateur_gps" />
+      </div>
+      <div class="status-icon">
+        <Icon name="mdi:compass" :color="indicateur_boussole" />
+      </div>
+      <div class="status-icon">
+        <Icon name="mdi:gyro" :color="indicateur_gyro" />
+      </div>
+      <div class="status-icon">
+        <Icon name="mdi:analog" :color="indicateur_analogique" />
+      </div>
+      <div class="status-icon">
+        <Icon name="mdi:antenna" :color="indicateur_antenne" />{{ reception_antenne }} dBm
+      </div>
+    </div>
+  </div>
+
+  <!-- Indicateurs de vitesse et de batterie -->
+  <div v-show="!indicateur_db" id="speed" class="indicateur">
+    <div class="title-indicator">
+      <p>Vitesse (Km/h)</p>
+    </div>
+
+    <div class="value-indicator">
+      <p>{{ indicateur_vitesse }}</p>
+    </div>
+  </div>
+
+  <div v-show="!indicateur_db" id="battery" class="indicateur">
+    <div class="title-indicator">
+      <p>Batterie (V)</p>
+    </div>
+
+    <div class="value-indicator">
+      <p>{{ indicateur_batterie }}</p>
+    </div>
+  </div>
+
+  <!-- Erreur de proxy -->
+  <h1 v-show="indicateur_db" id="erreur-db">
+    Impossible de joindre la base de donnée.
+  </h1>
+
+  <!-- Indicateur d'angles -->
+  <object v-show="!indicateur_db" id="angles" ref="angles" data="/hud.svg" type="image/svg+xml" />
+
+  <!-- GPS & Boussole -->
+  <iframe v-show="!indicateur_db" id="gps" ref="gps" src="/gps" frameborder="0" />
+  <object id="boussole" ref="boussole" data="/boussole.svg" type="image/svg+xml" />
+</template>

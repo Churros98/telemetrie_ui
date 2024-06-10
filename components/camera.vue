@@ -1,5 +1,7 @@
 <template>
-    <img id="camera" src="http://localhost:8000/stream" alt="">
+  <object id="camera" data="http://localhost:8000/stream" type="image/png">
+    <img src="/nostream.png">
+  </object>
 </template>
 
 <style>
@@ -8,5 +10,12 @@
         width: 100%;
         height: 100%;
         background-color: black;
+    }
+
+    img {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
     }
 </style>

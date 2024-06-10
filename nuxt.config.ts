@@ -5,5 +5,5 @@ export default defineNuxtConfig({
     'nuxt-icon',
     '@vueuse/nuxt',
   ],
-  devtools: { enabled: true }
+  devtools: { enabled: true },
 })
