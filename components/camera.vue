@@ -7,9 +7,7 @@ const camera_url = `https://video.theorywrong.me/stream/${props.uuid}`
 </script>
 
 <template>
-  <object id="camera" :data="camera_url" type="image/jpeg">
-    <img src="/nostream.png">
-  </object>
+  <img id="camera" :src="camera_url" type="image/jpeg">
 </template>
 
 <style>
