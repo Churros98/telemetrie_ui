@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:  
       - name: Install zip
+        if: startsWith(github.ref, 'refs/tags/v')
         run: sudo apt-get install zip
 
       - name: Checkout
@@ -36,8 +37,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
-        run: pnpm run build
+      - name: Generate
+        run: pnpm run generate
 
       - name: Zip
         run: zip -r release.zip .output/public/*
