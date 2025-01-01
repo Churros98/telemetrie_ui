@@ -1,3 +1,5 @@
+name: Nuxt.js Build and Release
+
 on:
   push:
     branches:
@@ -31,7 +33,7 @@ jobs:
         run: pnpm run build
 
       - name: Release
-        if: github.ref == 'refs/tags/v*'
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref }}
