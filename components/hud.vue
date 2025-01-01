@@ -66,7 +66,7 @@ watchEffect(() => {
   const angleLayer = angles.value?.contentDocument?.getElementById('layer1')
   if (angleLayer) {
     angleLayer.style.transformOrigin = '50% 50%'
-    angleLayer.style.transform = `rotate(${sensors.value.imu.angles[1] % 360}deg) translate(0px, ${sensors.value.imu.angles[0] % 360}%)`
+    angleLayer.style.transform = `rotate(-${sensors.value.imu.angles[1] % 360}deg) translate(0px, -${sensors.value.imu.angles[0] % 360}%)`
   }
 
   gpsActions.update(sensors.value.gps.latitude, sensors.value.gps.longitude, sensors.value.mag.heading)
