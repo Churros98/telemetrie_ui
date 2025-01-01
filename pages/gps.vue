@@ -20,9 +20,10 @@ L.Marker.addInitHook(function (this: any) {
 
   this.options.rotationOrigin = this.options.rotationOrigin || iconAnchor || 'center bottom'
   this.options.rotationAngle = this.options.rotationAngle || 0
-
   // Ensure marker keeps rotated during dragging
-  this.on('drag', (e) => { e.target._applyRotation() })
+  this.on('drag', (e: any) => {
+    e.target._applyRotation()
+  })
 })
 
 L.Marker.include({
@@ -90,7 +91,7 @@ gps_chan.onmessage = function (message) {
 
 onMounted(() => {
   if (map.value == null) {
-    console.log('Map non trouvé dans le DOM.')
+    console.error('Map non trouvé dans le DOM.')
     return
   }
 
